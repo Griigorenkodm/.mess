@@ -121,13 +121,17 @@ body{
 }
 .chathead__row{
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   gap: 10px;
   align-items: center;
 }
 .chathead__menu{
   display: none;
   padding: 10px 12px;
+}
+.chathead__share{
+  padding: 10px 12px;
+  justify-self: end;
 }
 .chathead__titles{ min-width: 0; }
 .chathead__title{ font-weight: 800; font-size: 18px; }

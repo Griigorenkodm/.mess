@@ -6,8 +6,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "watch": "tsc -p tsconfig.json -w",
-    "start": "npm run build && node server/server.js",
-    "dev": "node server/server.js"
+    "start": "node server/server.js",
+    "start:local": "npm run build && node server/server.js",
+    "dev": "node server/server.js",
+    "postinstall": "npm run build"
   },
   "dependencies": {
     "express": "^5.1.0",
@@ -15,5 +17,8 @@
   },
   "devDependencies": {
     "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

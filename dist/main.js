@@ -62,6 +62,7 @@ const ui = {
     overlay: el("overlay"),
     app: el("app"),
     mobileChatsBtn: el("mobileChatsBtn"),
+    shareChatBtn: el("shareChatBtn"),
 };
 function getDefaultState() {
     var _a;
@@ -147,6 +148,7 @@ function getWsUrl() {
 }
 let ws = null;
 let serverMode = false;
+let pendingChatFromUrl = null;
 function broadcast(ev) {
     if (!channel)
         return;
@@ -202,11 +204,13 @@ function connectServer() {
             state.chats = (_a = data.state.chats) !== null && _a !== void 0 ? _a : [];
             state.messages = (_b = data.state.messages) !== null && _b !== void 0 ? _b : [];
             ensureActiveChat();
+            applyChatFromUrlIfNeeded();
             render();
             return;
         }
         if (data.type === "op") {
             applyServerOp(data.op);
+            applyChatFromUrlIfNeeded();
             render();
             return;
         }
@@ -230,6 +234,10 @@ function applyServerOp(op) {
         state.chats = [op.chat, ...state.chats.filter((c) => c.id !== op.chat.id)];
         if (!state.activeChatId)
             state.activeChatId = op.chat.id;
+        return;
+    }
+    if (op.type === "chatUpdated") {
+        state.chats = [op.chat, ...state.chats.filter((c) => c.id !== op.chat.id)];
         return;
     }
     if (op.type === "messageSent") {
@@ -265,6 +273,52 @@ function setActiveChat(chatId) {
     render();
     closeDrawer();
     ui.messageInput.focus();
+}
+function getChatIdFromUrl() {
+    const qs = new URLSearchParams(location.search);
+    const id = qs.get("chat");
+    return id && id.trim() ? id.trim() : null;
+}
+function setChatIdInUrl(chatId) {
+    const url = new URL(location.href);
+    url.searchParams.set("chat", chatId);
+    history.replaceState(null, "", url.toString());
+}
+function applyChatFromUrlIfNeeded() {
+    if (!pendingChatFromUrl)
+        return;
+    const id = pendingChatFromUrl;
+    const exists = state.chats.some((c) => c.id === id);
+    if (!exists)
+        return;
+    state.activeChatId = id;
+    pendingChatFromUrl = null;
+    if (serverMode && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "op", op: { type: "joinChat", chatId: id } }));
+    }
+}
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+async function shareActiveChatLink() {
+    const chatId = state.activeChatId;
+    if (!chatId)
+        return;
+    if (location.protocol === "http:" || location.protocol === "https:") {
+        const url = new URL(location.href);
+        url.searchParams.set("chat", chatId);
+        const ok = await copyToClipboard(url.toString());
+        if (!ok)
+            prompt("Скопируйте ссылку:", url.toString());
+        return;
+    }
+    alert("Ссылка работает в серверном режиме (http://localhost:3000). Запустите npm run start.");
 }
 function isMobileLayout() {
     return window.matchMedia("(max-width: 920px)").matches;
@@ -483,6 +537,9 @@ function initEvents() {
     ui.mobileChatsBtn.addEventListener("click", () => {
         openDrawer();
     });
+    ui.shareChatBtn.addEventListener("click", () => {
+        void shareActiveChatLink();
+    });
     ui.overlay.addEventListener("click", () => {
         closeDrawer();
     });
@@ -519,12 +576,19 @@ function initEvents() {
     });
 }
 function boot() {
+    pendingChatFromUrl = getChatIdFromUrl();
     // Ask other tabs for their freshest snapshot.
     connectServer();
     if (!serverMode) {
         broadcast({ type: "poke", from: instanceId, sentAt: now() });
     }
     initEvents();
+    if (pendingChatFromUrl) {
+        // In local mode we can apply immediately (state already loaded).
+        applyChatFromUrlIfNeeded();
+        if (state.activeChatId)
+            setChatIdInUrl(state.activeChatId);
+    }
     render();
 }
 boot();

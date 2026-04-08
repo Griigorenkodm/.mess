@@ -22,7 +22,7 @@ npm install
 ### Вариант A: с сервером (рекомендуется)
 
 ```bash
-npm run start
+npm run start:local
 ```
 
 Откройте в браузере: `http://localhost:3000`
@@ -44,4 +44,16 @@ npm run watch
 ```
 
 После изменений обновляйте страницу.
+
+## Деплой на Render (домен вместо localhost)
+
+1) Загрузите проект в GitHub (Render подтягивает код из репозитория).
+2) В Render создайте **New Web Service** и выберите репозиторий.
+3) Render сам прочитает `render.yaml`, либо выставьте вручную:
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+4) После деплоя Render даст домен вида `https://<service>.onrender.com`.
+
+Ссылки на чаты будут такого вида:
+- `https://<service>.onrender.com/?chat=<id>`
 

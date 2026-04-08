@@ -17,6 +17,13 @@
       "author": "User",
       "text": "ghbdtn",
       "createdAt": 1775655950355
+    },
+    {
+      "id": "msg_ee41329e7b244_19d6d5df034",
+      "chatId": "chat_d8ae16e965f08_19d6d577ee6",
+      "author": "Пользователь",
+      "text": "привет",
+      "createdAt": 1775656366132
     }
   ]
 }

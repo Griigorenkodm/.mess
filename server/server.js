@@ -114,7 +114,7 @@ wss.on("connection", (ws) => {
     if (msg.type !== "op" || !msg.op || typeof msg.op !== "object") return;
     const op = msg.op;
 
-    // Operations: createChat | sendMessage | editMessage | deleteMessageForAll
+    // Operations: createChat | joinChat | sendMessage | editMessage | deleteMessageForAll
     if (op.type === "createChat") {
       const title = typeof op.title === "string" ? op.title.trim().slice(0, 60) : "";
       const members = Array.isArray(op.members)
@@ -137,6 +137,20 @@ wss.on("connection", (ws) => {
       db.chats.unshift(chat);
       saveDb(db);
       broadcast({ type: "op", op: { type: "chatCreated", chat }, sentAt: now() });
+      return;
+    }
+
+    if (op.type === "joinChat") {
+      const chatId = typeof op.chatId === "string" ? op.chatId : "";
+      if (!chatId) return;
+      const chat = getChatById(chatId);
+      if (!chat) return;
+      if (!Array.isArray(chat.members)) chat.members = [];
+      if (!chat.members.includes(ws.user.name)) {
+        chat.members.push(ws.user.name);
+        saveDb(db);
+        broadcast({ type: "op", op: { type: "chatUpdated", chat }, sentAt: now() });
+      }
       return;
     }
 

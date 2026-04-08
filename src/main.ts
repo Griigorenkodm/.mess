@@ -42,6 +42,7 @@ type ServerWire =
       type: "op";
       op:
         | { type: "chatCreated"; chat: Chat }
+        | { type: "chatUpdated"; chat: Chat }
         | { type: "messageSent"; message: Message }
         | { type: "messageEdited"; messageId: string; text: string; editedAt: number }
         | { type: "messageDeleted"; messageId: string; deletedAt: number; deletedBy: string };
@@ -117,6 +118,7 @@ const ui = {
   overlay: el<HTMLDivElement>("overlay"),
   app: el<HTMLDivElement>("app"),
   mobileChatsBtn: el<HTMLButtonElement>("mobileChatsBtn"),
+  shareChatBtn: el<HTMLButtonElement>("shareChatBtn"),
 };
 
 function getDefaultState(): AppState {
@@ -209,6 +211,7 @@ function getWsUrl(): string | null {
 
 let ws: WebSocket | null = null;
 let serverMode = false;
+let pendingChatFromUrl: string | null = null;
 
 function broadcast(ev: WireEvent): void {
   if (!channel) return;
@@ -271,12 +274,14 @@ function connectServer(): void {
       state.chats = data.state.chats ?? [];
       state.messages = data.state.messages ?? [];
       ensureActiveChat();
+      applyChatFromUrlIfNeeded();
       render();
       return;
     }
 
     if (data.type === "op") {
       applyServerOp(data.op);
+      applyChatFromUrlIfNeeded();
       render();
       return;
     }
@@ -301,6 +306,10 @@ function applyServerOp(op: ServerOp): void {
   if (op.type === "chatCreated") {
     state.chats = [op.chat, ...state.chats.filter((c) => c.id !== op.chat.id)];
     if (!state.activeChatId) state.activeChatId = op.chat.id;
+    return;
+  }
+  if (op.type === "chatUpdated") {
+    state.chats = [op.chat, ...state.chats.filter((c) => c.id !== op.chat.id)];
     return;
   }
   if (op.type === "messageSent") {
@@ -334,6 +343,55 @@ function setActiveChat(chatId: string): void {
   render();
   closeDrawer();
   ui.messageInput.focus();
+}
+
+function getChatIdFromUrl(): string | null {
+  const qs = new URLSearchParams(location.search);
+  const id = qs.get("chat");
+  return id && id.trim() ? id.trim() : null;
+}
+
+function setChatIdInUrl(chatId: string): void {
+  const url = new URL(location.href);
+  url.searchParams.set("chat", chatId);
+  history.replaceState(null, "", url.toString());
+}
+
+function applyChatFromUrlIfNeeded(): void {
+  if (!pendingChatFromUrl) return;
+  const id = pendingChatFromUrl;
+  const exists = state.chats.some((c) => c.id === id);
+  if (!exists) return;
+  state.activeChatId = id;
+  pendingChatFromUrl = null;
+
+  if (serverMode && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "op", op: { type: "joinChat", chatId: id } }));
+  }
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function shareActiveChatLink(): Promise<void> {
+  const chatId = state.activeChatId;
+  if (!chatId) return;
+
+  if (location.protocol === "http:" || location.protocol === "https:") {
+    const url = new URL(location.href);
+    url.searchParams.set("chat", chatId);
+    const ok = await copyToClipboard(url.toString());
+    if (!ok) prompt("Скопируйте ссылку:", url.toString());
+    return;
+  }
+
+  alert("Ссылка работает в серверном режиме (http://localhost:3000). Запустите npm run start.");
 }
 
 function isMobileLayout(): boolean {
@@ -576,6 +634,10 @@ function initEvents(): void {
     openDrawer();
   });
 
+  ui.shareChatBtn.addEventListener("click", () => {
+    void shareActiveChatLink();
+  });
+
   ui.overlay.addEventListener("click", () => {
     closeDrawer();
   });
@@ -616,12 +678,18 @@ function initEvents(): void {
 }
 
 function boot(): void {
+  pendingChatFromUrl = getChatIdFromUrl();
   // Ask other tabs for their freshest snapshot.
   connectServer();
   if (!serverMode) {
     broadcast({ type: "poke", from: instanceId, sentAt: now() });
   }
   initEvents();
+  if (pendingChatFromUrl) {
+    // In local mode we can apply immediately (state already loaded).
+    applyChatFromUrlIfNeeded();
+    if (state.activeChatId) setChatIdInUrl(state.activeChatId);
+  }
   render();
 }
 
