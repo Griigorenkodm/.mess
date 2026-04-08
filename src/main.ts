@@ -402,11 +402,13 @@ function openDrawer(): void {
   if (!isMobileLayout()) return;
   ui.app.classList.add("app--drawer-open");
   ui.overlay.hidden = false;
+  document.body.style.overflow = "hidden";
 }
 
 function closeDrawer(): void {
   ui.app.classList.remove("app--drawer-open");
   ui.overlay.hidden = true;
+  document.body.style.overflow = "";
 }
 
 function createChat(title: string, members: string[]): void {

@@ -31,6 +31,7 @@ body{
   margin: 0;
   font-family: var(--font);
   color: var(--text);
+  -webkit-text-size-adjust: 100%;
   background:
     radial-gradient(1200px 800px at 15% 10%, rgba(124,92,255,0.25), transparent 55%),
     radial-gradient(1000px 700px at 85% 20%, rgba(0, 210, 255, 0.15), transparent 60%),
@@ -42,6 +43,8 @@ body{
 
 .app{
   height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: 360px 1fr;
 }
@@ -143,6 +146,7 @@ body{
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overscroll-behavior: contain;
 }
 
 .msg{
@@ -194,6 +198,7 @@ body{
   background: rgba(255,255,255,0.04);
   color: var(--text);
   outline: none;
+  font-size: 16px;
 }
 .input:focus{
   border-color: rgba(124,92,255,0.55);
@@ -204,7 +209,7 @@ body{
 .btn{
   border-radius: 12px;
   border: 1px solid rgba(124,92,255,0.55);
-  padding: 10px 12px;
+  padding: 12px 14px;
   background: rgba(124,92,255,0.22);
   color: var(--text);
   cursor: pointer;
@@ -260,22 +265,45 @@ html[data-theme="light"] .dialog{
     top: 0;
     left: 0;
     bottom: 0;
-    width: min(360px, calc(100vw - 56px));
+    width: min(380px, calc(100vw - 56px));
     z-index: 50;
     transform: translateX(-110%);
     transition: transform 180ms ease;
     box-shadow: var(--shadow);
     border-right: 1px solid var(--border);
     background: linear-gradient(to bottom, rgba(255,255,255,0.04), rgba(0,0,0,0.0) 60%), var(--bg);
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   .app--drawer-open .sidebar{
     transform: translateX(0);
   }
 
-  .main__header{ padding: 12px 12px 10px; }
+  .main__header{
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px;
+  }
   .messages{ padding: 12px; }
-  .composer{ padding: 12px; }
+  .composer{
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .composer__hint{ display: none; }
   .msg{ max-width: 92vw; }
+  .msg__actions{ gap: 10px; }
+}
+
+@media (max-width: 420px){
+  .composer__row{
+    grid-template-columns: 1fr;
+  }
+  #sendBtn{
+    width: 100%;
+  }
+  .chathead__row{
+    grid-template-columns: auto 1fr;
+  }
+  .chathead__share{
+    display: none;
+  }
 }
 

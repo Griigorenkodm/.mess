@@ -23,7 +23,27 @@
       "chatId": "chat_d8ae16e965f08_19d6d577ee6",
       "author": "Пользователь",
       "text": "привет",
-      "createdAt": 1775656366132
+      "createdAt": 1775656366132,
+      "deletedAt": 1775657857555,
+      "deletedBy": "Пользователь"
+    },
+    {
+      "id": "msg_90dad40e929728_19d6d737986",
+      "chatId": "chat_d8ae16e965f08_19d6d577ee6",
+      "author": "Пользователь",
+      "text": "привт",
+      "createdAt": 1775657777542,
+      "deletedAt": 1775657856202,
+      "deletedBy": "Пользователь"
+    },
+    {
+      "id": "msg_3e526481937af_19d6d739f86",
+      "chatId": "chat_d8ae16e965f08_19d6d577ee6",
+      "author": "Пользователь",
+      "text": "окноьылнылыыкныкынллнлнлнлн",
+      "createdAt": 1775657787270,
+      "deletedAt": 1775657854548,
+      "deletedBy": "Пользователь"
     }
   ]
 }

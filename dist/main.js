@@ -328,10 +328,12 @@ function openDrawer() {
         return;
     ui.app.classList.add("app--drawer-open");
     ui.overlay.hidden = false;
+    document.body.style.overflow = "hidden";
 }
 function closeDrawer() {
     ui.app.classList.remove("app--drawer-open");
     ui.overlay.hidden = true;
+    document.body.style.overflow = "";
 }
 function createChat(title, members) {
     if (serverMode && ws && ws.readyState === WebSocket.OPEN) {
