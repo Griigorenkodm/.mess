@@ -1,0 +1,19 @@
+{
+  "name": "mess-local-messenger",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local messenger (HTML/CSS/JS/TS) with themes, group chats, and message deletion.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w",
+    "start": "npm run build && node server/server.js",
+    "dev": "node server/server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "chats": [
+    {
+      "id": "chat_d8ae16e965f08_19d6d577ee6",
+      "title": "uh",
+      "members": [
+        "User"
+      ],
+      "createdAt": 1775655943910
+    }
+  ],
+  "messages": [
+    {
+      "id": "msg_79d2e6f4c5b3b8_19d6d579813",
+      "chatId": "chat_d8ae16e965f08_19d6d577ee6",
+      "author": "User",
+      "text": "ghbdtn",
+      "createdAt": 1775655950355
+    }
+  ]
+}

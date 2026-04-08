@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Mess — локальный мессенджер</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <div class="overlay" id="overlay" hidden></div>
+      <aside class="sidebar">
+        <div class="sidebar__top">
+          <div class="brand">
+            <div class="brand__title">Mess</div>
+            <div class="brand__subtitle" id="currentUserLabel"></div>
+          </div>
+          <div class="sidebar__actions">
+            <button class="btn btn--ghost" id="themeToggle" type="button" title="Сменить тему">
+              Тема
+            </button>
+            <button class="btn" id="newChatBtn" type="button" title="Создать чат">
+              + Чат
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar__search">
+          <input class="input" id="chatSearch" placeholder="Поиск чатов…" />
+        </div>
+
+        <div class="chatlist" id="chatList"></div>
+      </aside>
+
+      <main class="main">
+        <header class="main__header">
+          <div class="chathead">
+            <div class="chathead__row">
+              <button class="btn btn--ghost chathead__menu" id="mobileChatsBtn" type="button" title="Чаты">
+                Чаты
+              </button>
+              <div class="chathead__titles">
+                <div class="chathead__title" id="activeChatTitle">Выберите чат</div>
+                <div class="chathead__meta" id="activeChatMeta"></div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <section class="messages" id="messages"></section>
+
+        <footer class="composer">
+          <div class="composer__row">
+            <input class="input" id="messageInput" placeholder="Напишите сообщение…" disabled />
+            <button class="btn" id="sendBtn" type="button" disabled>Отправить</button>
+          </div>
+          <div class="composer__hint" id="composerHint">
+            Подсказка: удаление сообщения — по кнопке «Удалить» возле сообщения.
+          </div>
+        </footer>
+      </main>
+    </div>
+
+    <dialog class="dialog" id="newChatDialog">
+      <form method="dialog" class="dialog__body" id="newChatForm">
+        <div class="dialog__title">Новый чат</div>
+        <label class="label">
+          Название
+          <input class="input" name="title" id="newChatTitle" placeholder="Напр. Проект / Друзья" required />
+        </label>
+        <label class="label">
+          Участники (через запятую)
+          <input class="input" name="members" id="newChatMembers" placeholder="Аня, Борис, Катя" />
+        </label>
+        <div class="dialog__actions">
+          <button class="btn btn--ghost" value="cancel" type="submit">Отмена</button>
+          <button class="btn" value="ok" type="submit">Создать</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="./dist/main.js"></script>
+  </body>
+</html>
