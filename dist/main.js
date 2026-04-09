@@ -45,7 +45,7 @@ function el(id) {
 }
 const ui = {
     currentUserLabel: el("currentUserLabel"),
-    themeToggle: el("themeToggle"),
+    settingsBtn: el("settingsBtn"),
     newChatBtn: el("newChatBtn"),
     chatSearch: el("chatSearch"),
     chatList: el("chatList"),
@@ -59,6 +59,9 @@ const ui = {
     newChatForm: el("newChatForm"),
     newChatTitle: el("newChatTitle"),
     newChatMembers: el("newChatMembers"),
+    settingsDialog: el("settingsDialog"),
+    settingsForm: el("settingsForm"),
+    themeSelect: el("themeSelect"),
     overlay: el("overlay"),
     app: el("app"),
     mobileChatsBtn: el("mobileChatsBtn"),
@@ -134,10 +137,6 @@ function saveState(state) {
 function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
 }
-function toggleTheme(state) {
-    state.theme = state.theme === "dark" ? "light" : "dark";
-    applyTheme(state.theme);
-}
 const instanceId = uid("inst");
 const channel = "BroadcastChannel" in window ? new BroadcastChannel(CHANNEL_NAME) : null;
 function getWsUrl() {
@@ -149,6 +148,9 @@ function getWsUrl() {
 let ws = null;
 let serverMode = false;
 let pendingChatFromUrl = null;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+const MAX_RECONNECT_DELAY = 10000;
 function broadcast(ev) {
     if (!channel)
         return;
@@ -187,12 +189,19 @@ if (channel) {
     });
 }
 function connectServer() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING))
+        return;
     const wsUrl = getWsUrl();
     if (!wsUrl)
         return;
     ws = new WebSocket(wsUrl);
-    serverMode = true;
     ws.addEventListener("open", () => {
+        serverMode = true;
+        reconnectAttempts = 0;
+        if (reconnectTimer !== null) {
+            window.clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
         ws === null || ws === void 0 ? void 0 : ws.send(JSON.stringify({ type: "join", currentUser: state.currentUser }));
     });
     ws.addEventListener("message", (e) => {
@@ -216,10 +225,24 @@ function connectServer() {
         }
     });
     ws.addEventListener("close", () => {
-        // Fallback to local mode when server disconnects.
+        // Fallback to local mode when server disconnects and keep retrying.
         serverMode = false;
         ws = null;
+        scheduleReconnect();
     });
+    ws.addEventListener("error", () => {
+        ws === null || ws === void 0 ? void 0 : ws.close();
+    });
+}
+function scheduleReconnect() {
+    if (reconnectTimer !== null)
+        return;
+    const delay = Math.min(1000 * 2 ** reconnectAttempts, MAX_RECONNECT_DELAY);
+    reconnectAttempts += 1;
+    reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        connectServer();
+    }, delay);
 }
 function safeParseJson(s) {
     try {
@@ -361,6 +384,8 @@ function sendMessage(text) {
     if (serverMode && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "op", op: { type: "sendMessage", chatId, text: clean } }));
         ui.messageInput.value = "";
+        resizeComposerInput();
+        updateSendAvailability();
         return;
     }
     const msg = {
@@ -374,7 +399,20 @@ function sendMessage(text) {
     saveAndSync();
     renderMessages();
     ui.messageInput.value = "";
+    resizeComposerInput();
+    updateSendAvailability();
     ui.messages.scrollTop = ui.messages.scrollHeight;
+}
+function resizeComposerInput() {
+    const input = ui.messageInput;
+    input.style.height = "0px";
+    const next = Math.max(42, Math.min(input.scrollHeight, 150));
+    input.style.height = `${next}px`;
+}
+function updateSendAvailability() {
+    const hasChat = Boolean(state.activeChatId);
+    const hasText = ui.messageInput.value.trim().length > 0;
+    ui.sendBtn.disabled = !hasChat || !hasText;
 }
 function canEditOrDelete(msg) {
     return msg.author === state.currentUser && !msg.deletedAt;
@@ -470,7 +508,7 @@ function renderHeader() {
     ui.activeChatMeta.textContent =
         active.members.length > 1 ? `Участники: ${active.members.join(", ")}` : "Личный чат";
     ui.messageInput.disabled = false;
-    ui.sendBtn.disabled = false;
+    updateSendAvailability();
 }
 function renderMessages() {
     const chatId = state.activeChatId;
@@ -520,15 +558,17 @@ function renderMessages() {
 function render() {
     ui.currentUserLabel.textContent = `Вы: ${state.currentUser}`;
     applyTheme(state.theme);
+    ui.themeSelect.value = state.theme;
     renderHeader();
     renderChats();
     renderMessages();
+    updateSendAvailability();
+    resizeComposerInput();
 }
 function initEvents() {
-    ui.themeToggle.addEventListener("click", () => {
-        toggleTheme(state);
-        saveAndSync();
-        render();
+    ui.settingsBtn.addEventListener("click", () => {
+        ui.themeSelect.value = state.theme;
+        ui.settingsDialog.showModal();
     });
     ui.newChatBtn.addEventListener("click", () => {
         ui.newChatTitle.value = "";
@@ -558,11 +598,26 @@ function initEvents() {
         ui.newChatDialog.close();
         createChat(title, members);
     });
+    ui.settingsForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const selected = ui.themeSelect.value;
+        if (selected === "dark" || selected === "light" || selected === "ocean") {
+            state.theme = selected;
+            applyTheme(state.theme);
+            saveAndSync();
+            render();
+        }
+        ui.settingsDialog.close();
+    });
     ui.chatSearch.addEventListener("input", () => {
         renderChats();
     });
     ui.sendBtn.addEventListener("click", () => {
         sendMessage(ui.messageInput.value);
+    });
+    ui.messageInput.addEventListener("input", () => {
+        updateSendAvailability();
+        resizeComposerInput();
     });
     ui.messageInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {

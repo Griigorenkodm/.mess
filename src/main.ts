@@ -1,4 +1,4 @@
-type Theme = "dark" | "light";
+type Theme = "dark" | "light" | "ocean";
 
 type Message = {
   id: string;
@@ -101,20 +101,23 @@ function el<T extends HTMLElement>(id: string): T {
 
 const ui = {
   currentUserLabel: el<HTMLDivElement>("currentUserLabel"),
-  themeToggle: el<HTMLButtonElement>("themeToggle"),
+  settingsBtn: el<HTMLButtonElement>("settingsBtn"),
   newChatBtn: el<HTMLButtonElement>("newChatBtn"),
   chatSearch: el<HTMLInputElement>("chatSearch"),
   chatList: el<HTMLDivElement>("chatList"),
   activeChatTitle: el<HTMLDivElement>("activeChatTitle"),
   activeChatMeta: el<HTMLDivElement>("activeChatMeta"),
   messages: el<HTMLDivElement>("messages"),
-  messageInput: el<HTMLInputElement>("messageInput"),
+  messageInput: el<HTMLTextAreaElement>("messageInput"),
   sendBtn: el<HTMLButtonElement>("sendBtn"),
   composerHint: el<HTMLDivElement>("composerHint"),
   newChatDialog: el<HTMLDialogElement>("newChatDialog"),
   newChatForm: el<HTMLFormElement>("newChatForm"),
   newChatTitle: el<HTMLInputElement>("newChatTitle"),
   newChatMembers: el<HTMLInputElement>("newChatMembers"),
+  settingsDialog: el<HTMLDialogElement>("settingsDialog"),
+  settingsForm: el<HTMLFormElement>("settingsForm"),
+  themeSelect: el<HTMLSelectElement>("themeSelect"),
   overlay: el<HTMLDivElement>("overlay"),
   app: el<HTMLDivElement>("app"),
   mobileChatsBtn: el<HTMLButtonElement>("mobileChatsBtn"),
@@ -191,11 +194,6 @@ function applyTheme(theme: Theme): void {
   document.documentElement.dataset.theme = theme;
 }
 
-function toggleTheme(state: AppState): void {
-  state.theme = state.theme === "dark" ? "light" : "dark";
-  applyTheme(state.theme);
-}
-
 type WireEvent =
   | { type: "sync"; state: AppState; from: string; sentAt: number }
   | { type: "poke"; from: string; sentAt: number };
@@ -212,6 +210,9 @@ function getWsUrl(): string | null {
 let ws: WebSocket | null = null;
 let serverMode = false;
 let pendingChatFromUrl: string | null = null;
+let reconnectAttempts = 0;
+let reconnectTimer: number | null = null;
+const MAX_RECONNECT_DELAY = 10000;
 
 function broadcast(ev: WireEvent): void {
   if (!channel) return;
@@ -256,13 +257,19 @@ if (channel) {
 }
 
 function connectServer(): void {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
   const wsUrl = getWsUrl();
   if (!wsUrl) return;
 
   ws = new WebSocket(wsUrl);
-  serverMode = true;
 
   ws.addEventListener("open", () => {
+    serverMode = true;
+    reconnectAttempts = 0;
+    if (reconnectTimer !== null) {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     ws?.send(JSON.stringify({ type: "join", currentUser: state.currentUser }));
   });
 
@@ -288,10 +295,25 @@ function connectServer(): void {
   });
 
   ws.addEventListener("close", () => {
-    // Fallback to local mode when server disconnects.
+    // Fallback to local mode when server disconnects and keep retrying.
     serverMode = false;
     ws = null;
+    scheduleReconnect();
   });
+
+  ws.addEventListener("error", () => {
+    ws?.close();
+  });
+}
+
+function scheduleReconnect(): void {
+  if (reconnectTimer !== null) return;
+  const delay = Math.min(1000 * 2 ** reconnectAttempts, MAX_RECONNECT_DELAY);
+  reconnectAttempts += 1;
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = null;
+    connectServer();
+  }, delay);
 }
 
 function safeParseJson(s: string): unknown | null {
@@ -438,6 +460,8 @@ function sendMessage(text: string): void {
   if (serverMode && ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "op", op: { type: "sendMessage", chatId, text: clean } }));
     ui.messageInput.value = "";
+    resizeComposerInput();
+    updateSendAvailability();
     return;
   }
 
@@ -452,7 +476,22 @@ function sendMessage(text: string): void {
   saveAndSync();
   renderMessages();
   ui.messageInput.value = "";
+  resizeComposerInput();
+  updateSendAvailability();
   ui.messages.scrollTop = ui.messages.scrollHeight;
+}
+
+function resizeComposerInput(): void {
+  const input = ui.messageInput;
+  input.style.height = "0px";
+  const next = Math.max(42, Math.min(input.scrollHeight, 150));
+  input.style.height = `${next}px`;
+}
+
+function updateSendAvailability(): void {
+  const hasChat = Boolean(state.activeChatId);
+  const hasText = ui.messageInput.value.trim().length > 0;
+  ui.sendBtn.disabled = !hasChat || !hasText;
 }
 
 function canEditOrDelete(msg: Message): boolean {
@@ -560,7 +599,7 @@ function renderHeader(): void {
     active.members.length > 1 ? `Участники: ${active.members.join(", ")}` : "Личный чат";
 
   ui.messageInput.disabled = false;
-  ui.sendBtn.disabled = false;
+  updateSendAvailability();
 }
 
 function renderMessages(): void {
@@ -613,16 +652,18 @@ function renderMessages(): void {
 function render(): void {
   ui.currentUserLabel.textContent = `Вы: ${state.currentUser}`;
   applyTheme(state.theme);
+  ui.themeSelect.value = state.theme;
   renderHeader();
   renderChats();
   renderMessages();
+  updateSendAvailability();
+  resizeComposerInput();
 }
 
 function initEvents(): void {
-  ui.themeToggle.addEventListener("click", () => {
-    toggleTheme(state);
-    saveAndSync();
-    render();
+  ui.settingsBtn.addEventListener("click", () => {
+    ui.themeSelect.value = state.theme;
+    ui.settingsDialog.showModal();
   });
 
   ui.newChatBtn.addEventListener("click", () => {
@@ -657,12 +698,29 @@ function initEvents(): void {
     createChat(title, members);
   });
 
+  ui.settingsForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const selected = ui.themeSelect.value;
+    if (selected === "dark" || selected === "light" || selected === "ocean") {
+      state.theme = selected;
+      applyTheme(state.theme);
+      saveAndSync();
+      render();
+    }
+    ui.settingsDialog.close();
+  });
+
   ui.chatSearch.addEventListener("input", () => {
     renderChats();
   });
 
   ui.sendBtn.addEventListener("click", () => {
     sendMessage(ui.messageInput.value);
+  });
+
+  ui.messageInput.addEventListener("input", () => {
+    updateSendAvailability();
+    resizeComposerInput();
   });
 
   ui.messageInput.addEventListener("keydown", (e) => {

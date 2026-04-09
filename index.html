@@ -16,8 +16,8 @@
             <div class="brand__subtitle" id="currentUserLabel"></div>
           </div>
           <div class="sidebar__actions">
-            <button class="btn btn--ghost" id="themeToggle" type="button" title="Сменить тему">
-              Тема
+            <button class="btn btn--ghost" id="settingsBtn" type="button" title="Настройки">
+              Настройки
             </button>
             <button class="btn" id="newChatBtn" type="button" title="Создать чат">
               + Чат
@@ -54,8 +54,12 @@
 
         <footer class="composer">
           <div class="composer__row">
-            <input class="input" id="messageInput" placeholder="Напишите сообщение…" disabled />
-            <button class="btn" id="sendBtn" type="button" disabled>Отправить</button>
+            <textarea class="input composer__input" id="messageInput" placeholder="Напишите сообщение…" rows="1" disabled></textarea>
+            <button class="btn btn--send" id="sendBtn" type="button" disabled aria-label="Отправить сообщение" title="Отправить">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2 21 23 12 2 3l5.2 8.1L16 12l-8.8.9L2 21Z"></path>
+              </svg>
+            </button>
           </div>
           <div class="composer__hint" id="composerHint">
             Подсказка: удаление сообщения — по кнопке «Удалить» возле сообщения.
@@ -78,6 +82,24 @@
         <div class="dialog__actions">
           <button class="btn btn--ghost" value="cancel" type="submit">Отмена</button>
           <button class="btn" value="ok" type="submit">Создать</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="dialog" id="settingsDialog">
+      <form method="dialog" class="dialog__body" id="settingsForm">
+        <div class="dialog__title">Настройки</div>
+        <label class="label">
+          Тема
+          <select class="input" id="themeSelect">
+            <option value="dark">Тёмная</option>
+            <option value="light">Светлая</option>
+            <option value="ocean">Ocean</option>
+          </select>
+        </label>
+        <div class="dialog__actions">
+          <button class="btn btn--ghost" value="cancel" type="submit">Отмена</button>
+          <button class="btn" value="ok" type="submit">Сохранить</button>
         </div>
       </form>
     </dialog>
