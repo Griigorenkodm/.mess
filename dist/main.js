@@ -62,14 +62,16 @@ const ui = {
     settingsDialog: el("settingsDialog"),
     settingsForm: el("settingsForm"),
     themeSelect: el("themeSelect"),
+    registerDialog: el("registerDialog"),
+    registerForm: el("registerForm"),
+    registerNameInput: el("registerNameInput"),
     overlay: el("overlay"),
     app: el("app"),
     mobileChatsBtn: el("mobileChatsBtn"),
     shareChatBtn: el("shareChatBtn"),
 };
 function getDefaultState() {
-    var _a;
-    const currentUser = clampName((_a = prompt("Ваше имя?")) !== null && _a !== void 0 ? _a : "Пользователь");
+    const currentUser = "Пользователь";
     const generalChatId = uid("chat");
     return {
         version: 2,
@@ -151,6 +153,7 @@ let pendingChatFromUrl = null;
 let reconnectAttempts = 0;
 let reconnectTimer = null;
 const MAX_RECONNECT_DELAY = 10000;
+const registrationRequired = !localStorage.getItem(STORAGE_KEY);
 function broadcast(ev) {
     if (!channel)
         return;
@@ -464,6 +467,17 @@ function saveAndSync() {
         broadcast({ type: "sync", state, from: instanceId, sentAt: now() });
     }
 }
+function setCurrentUserName(nextName) {
+    const prevName = state.currentUser;
+    const cleanName = clampName(nextName);
+    if (cleanName === prevName)
+        return;
+    state.currentUser = cleanName;
+    state.chats = state.chats.map((chat) => {
+        const members = Array.from(new Set(chat.members.map((member) => (member === prevName ? cleanName : member))));
+        return { ...chat, members };
+    });
+}
 function renderChats() {
     const q = ui.chatSearch.value.trim().toLowerCase();
     const chats = q
@@ -609,6 +623,26 @@ function initEvents() {
         }
         ui.settingsDialog.close();
     });
+    ui.registerDialog.addEventListener("cancel", (e) => {
+        if (registrationRequired)
+            e.preventDefault();
+    });
+    ui.registerForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const entered = ui.registerNameInput.value.trim();
+        if (!entered)
+            return;
+        setCurrentUserName(entered);
+        saveAndSync();
+        render();
+        ui.registerDialog.close();
+        if (!serverMode) {
+            connectServer();
+            if (!serverMode) {
+                broadcast({ type: "poke", from: instanceId, sentAt: now() });
+            }
+        }
+    });
     ui.chatSearch.addEventListener("input", () => {
         renderChats();
     });
@@ -634,12 +668,14 @@ function initEvents() {
 }
 function boot() {
     pendingChatFromUrl = getChatIdFromUrl();
-    // Ask other tabs for their freshest snapshot.
-    connectServer();
-    if (!serverMode) {
-        broadcast({ type: "poke", from: instanceId, sentAt: now() });
-    }
     initEvents();
+    if (!registrationRequired) {
+        // Ask other tabs for their freshest snapshot.
+        connectServer();
+        if (!serverMode) {
+            broadcast({ type: "poke", from: instanceId, sentAt: now() });
+        }
+    }
     if (pendingChatFromUrl) {
         // In local mode we can apply immediately (state already loaded).
         applyChatFromUrlIfNeeded();
@@ -647,6 +683,11 @@ function boot() {
             setChatIdInUrl(state.activeChatId);
     }
     render();
+    if (registrationRequired) {
+        ui.registerNameInput.value = state.currentUser === "Пользователь" ? "" : state.currentUser;
+        ui.registerDialog.showModal();
+        setTimeout(() => ui.registerNameInput.focus(), 0);
+    }
 }
 boot();
 //# sourceMappingURL=main.js.map
