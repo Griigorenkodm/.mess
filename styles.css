@@ -38,12 +38,15 @@ html[data-theme="ocean"]{
 }
 
 *{ box-sizing: border-box; }
+html{
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 html,body{ height: 100%; }
 body{
   margin: 0;
   font-family: var(--font);
   color: var(--text);
-  -webkit-text-size-adjust: 100%;
   background:
     radial-gradient(1200px 800px at 15% 10%, rgba(124,92,255,0.25), transparent 55%),
     radial-gradient(1000px 700px at 85% 20%, rgba(0, 210, 255, 0.15), transparent 60%),
@@ -282,15 +285,41 @@ html[data-theme="light"] .dialog{
 .label{ display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
 
 @media (max-width: 920px){
-  .app{ grid-template-columns: 1fr; }
+  /* Чёткая типографика и касания на телефонах */
+  body{
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .btn,
+  .chatitem,
+  dialog{
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Один экран: только список сообщений скроллится */
+  .app{
+    grid-template-columns: 1fr;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
   .chathead__menu{ display: inline-flex; }
 
   .overlay{
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.55);
+    background: rgba(0,0,0,0.5);
     z-index: 40;
+  }
+
+  /* Спокойный фон без «мягких» градиентов — меньше визуального шума */
+  body{
+    background: var(--bg);
   }
 
   .sidebar{
@@ -298,13 +327,15 @@ html[data-theme="light"] .dialog{
     top: 0;
     left: 0;
     bottom: 0;
-    width: min(380px, calc(100vw - 56px));
+    width: min(380px, calc(100vw - 56px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
     z-index: 50;
     transform: translateX(-110%);
     transition: transform 180ms ease;
     box-shadow: var(--shadow);
     border-right: 1px solid var(--border);
-    background: linear-gradient(to bottom, rgba(255,255,255,0.04), rgba(0,0,0,0.0) 60%), var(--bg);
+    background: var(--bg);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: 16px;
     padding-top: calc(16px + env(safe-area-inset-top, 0px));
     padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
@@ -313,24 +344,105 @@ html[data-theme="light"] .dialog{
     transform: translateX(0);
   }
 
+  .main{
+    min-height: 0;
+    min-width: 0;
+  }
+
   .main__header{
     padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
   }
-  .messages{ padding: 12px; }
+
+  .messages{
+    padding: 12px;
+    padding-bottom: 16px;
+    gap: 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .composer{
+    flex-shrink: 0;
     padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border);
+    background: var(--bg);
   }
+
   .composer__hint{ display: none; }
-  .msg{ max-width: 92vw; }
-  .msg__actions{ gap: 10px; }
+
+  .msg{
+    max-width: min(92vw, 100%);
+    box-shadow: none;
+  }
+  .msg__actions{ gap: 10px; flex-wrap: wrap; }
+
+  .chathead__title{
+    font-size: 17px;
+    line-height: 1.25;
+  }
+  .chathead__meta{
+    font-size: 13px;
+    line-height: 1.3;
+  }
+
+  .sidebar__top{
+    flex-wrap: wrap;
+  }
+  .sidebar__actions{
+    width: 100%;
+    justify-content: stretch;
+  }
+  .sidebar__actions .btn{
+    flex: 1;
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+
+  .chathead__menu,
+  .chathead__share{
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px 12px;
+    justify-content: center;
+  }
+
+  .btn--send{
+    width: 48px;
+    min-width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+  }
+
+  /* Диалоги: не вылезают за экран, учёт safe-area, без полупрозрачности */
+  .dialog{
+    width: min(520px, calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+    margin: auto;
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    overflow: auto;
+    background: var(--bg);
+  }
+  html[data-theme="light"] .dialog{
+    background: var(--bg);
+  }
+  .dialog__body{
+    padding: 16px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
 }
 
 @media (max-width: 420px){
   .chathead__row{
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
   .chathead__share{
-    display: none;
+    font-size: 12px;
+    padding: 10px;
+  }
+  .sidebar__actions .btn{
+    font-size: 14px;
   }
 }
 

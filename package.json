@@ -8,6 +8,7 @@
     "watch": "tsc -p tsconfig.json -w",
     "start": "node server/server.js",
     "start:local": "npm run build && node server/server.js",
+    "start:pm2": "npx --yes pm2-runtime@5 start ecosystem.config.cjs",
     "dev": "node server/server.js",
     "postinstall": "npm run build"
   },

@@ -2,11 +2,15 @@ const path = require("path");
 const fs = require("fs");
 const http = require("http");
 const express = require("express");
-const { WebSocketServer } = require("ws");
+const { WebSocketServer, WebSocket } = require("ws");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 const ROOT = path.resolve(__dirname, "..");
 const DB_PATH = path.join(__dirname, "db.json");
+/** Интервал ping по WebSocket — держит соединения за прокси / NAT и сбрасывает «мёртвые» клиенты */
+const WS_HEARTBEAT_MS = Number(process.env.WS_HEARTBEAT_MS) || 30000;
+
+const startedAt = Date.now();
 
 function now() {
   return Date.now();
@@ -56,21 +60,50 @@ const db = loadDb();
 
 const app = express();
 app.disable("x-powered-by");
+app.set("trust proxy", 1);
 
 // Serve static app
 app.use(express.static(ROOT));
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, uptimeMs: now() - startedAt });
 });
 
 const server = http.createServer(app);
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+
 const wss = new WebSocketServer({ server, path: "/ws" });
+
+const wsHeartbeat = setInterval(() => {
+  for (const client of wss.clients) {
+    if (client.readyState !== WebSocket.OPEN) continue;
+    if (client.isAlive === false) {
+      try {
+        client.terminate();
+      } catch {
+        /* ignore */
+      }
+      continue;
+    }
+    client.isAlive = false;
+    try {
+      client.ping();
+    } catch {
+      try {
+        client.terminate();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}, WS_HEARTBEAT_MS);
+wsHeartbeat.unref?.();
 
 function broadcast(obj) {
   const data = JSON.stringify(obj);
   for (const client of wss.clients) {
-    if (client.readyState === 1) {
+    if (client.readyState === WebSocket.OPEN) {
       client.send(data);
     }
   }
@@ -90,7 +123,21 @@ function normalizeName(name) {
   return v.length ? v.slice(0, 40) : "Пользователь";
 }
 
+wss.on("error", (err) => {
+  // eslint-disable-next-line no-console
+  console.error("[ws server]", err);
+});
+
 wss.on("connection", (ws) => {
+  ws.isAlive = true;
+  ws.on("pong", () => {
+    ws.isAlive = true;
+  });
+  ws.on("error", (err) => {
+    // eslint-disable-next-line no-console
+    console.error("[ws client]", err);
+  });
+
   ws.user = { name: "Пользователь" };
 
   ws.send(
@@ -102,114 +149,162 @@ wss.on("connection", (ws) => {
   );
 
   ws.on("message", (buf) => {
-    const msg = safeJsonParse(String(buf));
-    if (!msg || typeof msg !== "object") return;
+    try {
+      const msg = safeJsonParse(String(buf));
+      if (!msg || typeof msg !== "object") return;
 
-    if (msg.type === "join") {
-      ws.user.name = normalizeName(msg.currentUser);
-      ws.send(JSON.stringify({ type: "joined", you: ws.user.name, sentAt: now() }));
-      return;
-    }
-
-    if (msg.type !== "op" || !msg.op || typeof msg.op !== "object") return;
-    const op = msg.op;
-
-    // Operations: createChat | joinChat | sendMessage | editMessage | deleteMessageForAll
-    if (op.type === "createChat") {
-      const title = typeof op.title === "string" ? op.title.trim().slice(0, 60) : "";
-      const members = Array.isArray(op.members)
-        ? Array.from(
-            new Set(
-              op.members
-                .filter((x) => typeof x === "string")
-                .map((x) => x.trim().replace(/\s+/g, " ").slice(0, 40))
-                .filter(Boolean),
-            ),
-          )
-        : [];
-
-      const chat = {
-        id: uid("chat"),
-        title: title || "Без названия",
-        members: Array.from(new Set([ws.user.name, ...members])),
-        createdAt: now(),
-      };
-      db.chats.unshift(chat);
-      saveDb(db);
-      broadcast({ type: "op", op: { type: "chatCreated", chat }, sentAt: now() });
-      return;
-    }
-
-    if (op.type === "joinChat") {
-      const chatId = typeof op.chatId === "string" ? op.chatId : "";
-      if (!chatId) return;
-      const chat = getChatById(chatId);
-      if (!chat) return;
-      if (!Array.isArray(chat.members)) chat.members = [];
-      if (!chat.members.includes(ws.user.name)) {
-        chat.members.push(ws.user.name);
-        saveDb(db);
-        broadcast({ type: "op", op: { type: "chatUpdated", chat }, sentAt: now() });
+      if (msg.type === "join") {
+        ws.user.name = normalizeName(msg.currentUser);
+        ws.send(JSON.stringify({ type: "joined", you: ws.user.name, sentAt: now() }));
+        return;
       }
-      return;
-    }
 
-    if (op.type === "sendMessage") {
-      const chatId = typeof op.chatId === "string" ? op.chatId : "";
-      const text = typeof op.text === "string" ? op.text.trim().slice(0, 4000) : "";
-      if (!chatId || !text) return;
-      if (!getChatById(chatId)) return;
+      if (msg.type !== "op" || !msg.op || typeof msg.op !== "object") return;
+      const op = msg.op;
 
-      const message = {
-        id: uid("msg"),
-        chatId,
-        author: ws.user.name,
-        text,
-        createdAt: now(),
-      };
-      db.messages.push(message);
-      saveDb(db);
-      broadcast({ type: "op", op: { type: "messageSent", message }, sentAt: now() });
-      return;
-    }
+      // Operations: createChat | joinChat | sendMessage | editMessage | deleteMessageForAll
+      if (op.type === "createChat") {
+        const title = typeof op.title === "string" ? op.title.trim().slice(0, 60) : "";
+        const members = Array.isArray(op.members)
+          ? Array.from(
+              new Set(
+                op.members
+                  .filter((x) => typeof x === "string")
+                  .map((x) => x.trim().replace(/\s+/g, " ").slice(0, 40))
+                  .filter(Boolean),
+              ),
+            )
+          : [];
 
-    if (op.type === "editMessage") {
-      const messageId = typeof op.messageId === "string" ? op.messageId : "";
-      const text = typeof op.text === "string" ? op.text.trim().slice(0, 4000) : "";
-      if (!messageId || !text) return;
+        const chat = {
+          id: uid("chat"),
+          title: title || "Без названия",
+          members: Array.from(new Set([ws.user.name, ...members])),
+          createdAt: now(),
+        };
+        db.chats.unshift(chat);
+        saveDb(db);
+        broadcast({ type: "op", op: { type: "chatCreated", chat }, sentAt: now() });
+        return;
+      }
 
-      const m = getMsgById(messageId);
-      if (!m) return;
-      if (m.author !== ws.user.name) return;
-      if (m.deletedAt) return;
+      if (op.type === "joinChat") {
+        const chatId = typeof op.chatId === "string" ? op.chatId : "";
+        if (!chatId) return;
+        const chat = getChatById(chatId);
+        if (!chat) return;
+        if (!Array.isArray(chat.members)) chat.members = [];
+        if (!chat.members.includes(ws.user.name)) {
+          chat.members.push(ws.user.name);
+          saveDb(db);
+          broadcast({ type: "op", op: { type: "chatUpdated", chat }, sentAt: now() });
+        }
+        return;
+      }
 
-      m.text = text;
-      m.editedAt = now();
-      saveDb(db);
-      broadcast({ type: "op", op: { type: "messageEdited", messageId, text: m.text, editedAt: m.editedAt }, sentAt: now() });
-      return;
-    }
+      if (op.type === "sendMessage") {
+        const chatId = typeof op.chatId === "string" ? op.chatId : "";
+        const text = typeof op.text === "string" ? op.text.trim().slice(0, 4000) : "";
+        if (!chatId || !text) return;
+        if (!getChatById(chatId)) return;
 
-    if (op.type === "deleteMessageForAll") {
-      const messageId = typeof op.messageId === "string" ? op.messageId : "";
-      if (!messageId) return;
+        const message = {
+          id: uid("msg"),
+          chatId,
+          author: ws.user.name,
+          text,
+          createdAt: now(),
+        };
+        db.messages.push(message);
+        saveDb(db);
+        broadcast({ type: "op", op: { type: "messageSent", message }, sentAt: now() });
+        return;
+      }
 
-      const m = getMsgById(messageId);
-      if (!m) return;
-      if (m.author !== ws.user.name) return;
-      if (m.deletedAt) return;
+      if (op.type === "editMessage") {
+        const messageId = typeof op.messageId === "string" ? op.messageId : "";
+        const text = typeof op.text === "string" ? op.text.trim().slice(0, 4000) : "";
+        if (!messageId || !text) return;
 
-      m.deletedAt = now();
-      m.deletedBy = ws.user.name;
-      saveDb(db);
-      broadcast({ type: "op", op: { type: "messageDeleted", messageId, deletedAt: m.deletedAt, deletedBy: m.deletedBy }, sentAt: now() });
-      return;
+        const m = getMsgById(messageId);
+        if (!m) return;
+        if (m.author !== ws.user.name) return;
+        if (m.deletedAt) return;
+
+        m.text = text;
+        m.editedAt = now();
+        saveDb(db);
+        broadcast({ type: "op", op: { type: "messageEdited", messageId, text: m.text, editedAt: m.editedAt }, sentAt: now() });
+        return;
+      }
+
+      if (op.type === "deleteMessageForAll") {
+        const messageId = typeof op.messageId === "string" ? op.messageId : "";
+        if (!messageId) return;
+
+        const m = getMsgById(messageId);
+        if (!m) return;
+        if (m.author !== ws.user.name) return;
+        if (m.deletedAt) return;
+
+        m.deletedAt = now();
+        m.deletedBy = ws.user.name;
+        saveDb(db);
+        broadcast({ type: "op", op: { type: "messageDeleted", messageId, deletedAt: m.deletedAt, deletedBy: m.deletedBy }, sentAt: now() });
+        return;
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[ws message]", err);
     }
   });
 });
 
-server.listen(PORT, () => {
+function shutdown(signal) {
   // eslint-disable-next-line no-console
-  console.log(`Mess server running: http://localhost:${PORT}`);
+  console.log(`${signal}: закрываю соединения…`);
+  clearInterval(wsHeartbeat);
+  for (const client of wss.clients) {
+    try {
+      client.close(1001, "Server shutdown");
+    } catch {
+      /* ignore */
+    }
+  }
+  wss.close(() => {
+    server.close(() => {
+      process.exit(0);
+    });
+  });
+  setTimeout(() => {
+    // eslint-disable-next-line no-console
+    console.error("Принудительный выход по таймауту");
+    process.exit(1);
+  }, 10_000).unref?.();
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
+process.on("uncaughtException", (err) => {
+  // eslint-disable-next-line no-console
+  console.error("uncaughtException", err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  // eslint-disable-next-line no-console
+  console.error("unhandledRejection", reason);
+});
+
+server.on("error", (err) => {
+  // eslint-disable-next-line no-console
+  console.error("HTTP server error", err);
+  process.exit(1);
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+  // eslint-disable-next-line no-console
+  console.log(`Mess server running on port ${PORT}`);
 });
 

@@ -2,7 +2,10 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
     <title>Mess — локальный мессенджер</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -43,7 +46,13 @@
                 <div class="chathead__title" id="activeChatTitle">Выберите чат</div>
                 <div class="chathead__meta" id="activeChatMeta"></div>
               </div>
-              <button class="btn btn--ghost chathead__share" id="shareChatBtn" type="button" title="Скопировать ссылку на чат">
+              <button
+                class="btn btn--ghost chathead__share"
+                id="shareChatBtn"
+                type="button"
+                title="Скопировать ссылку на чат"
+                aria-label="Скопировать ссылку на чат"
+              >
                 Ссылка
               </button>
             </div>
